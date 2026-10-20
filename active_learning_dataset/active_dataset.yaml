@@ -1,0 +1,9 @@
+path: D:/Gloves/active_learning_dataset
+train: images/train
+val: images/val
+test: images/test
+
+names:
+  0: gloved_hand
+  1: bare_hand
+nc: 2

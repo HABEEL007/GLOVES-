@@ -1,0 +1,71 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDEs & editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+
+# Temporary / Scratch
+scratch/
+*.tmp
+*.log
+
+# Datasets & Heavy Media (Excluded as requested)
+CPPE-Dataset/
+active_learning_dataset/images/*
+!active_learning_dataset/images/.gitkeep
+active_learning_dataset/labels/*
+!active_learning_dataset/labels/.gitkeep
+cctv_dataset/*
+!cctv_dataset/.gitkeep
+uploads/videos/*
+!uploads/videos/.gitkeep
+evidence/*
+!evidence/.gitkeep
+
+# Exclude video formats from any directory
+*.mp4
+*.avi
+*.mkv
+*.mov

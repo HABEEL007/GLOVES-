@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GlovesLabeler AI Studio | Active Annotation</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css?v=3">
+</head>
+<body>
+  <!-- Top App Navigation -->
+  <header class="app-header">
+    <div class="logo-group">
+      <div class="logo-icon">🧤</div>
+      <div class="logo-text">
+        <h1>GlovesLabeler <span>AI Studio</span></h1>
+        <p class="subtitle">Human-in-the-Loop Active CCTV Annotation</p>
+      </div>
+    </div>
+
+    <!-- Active Dataset Folder Selector -->
+    <div class="folder-picker-group">
+      <label for="folderSelect">Dataset:</label>
+      <select id="folderSelect" class="styled-select"></select>
+    </div>
+
+    <!-- Review Progress Tracker -->
+    <div class="progress-container">
+      <div class="progress-labels">
+        <span id="progressText">0 / 0 Reviewed (0%)</span>
+        <span id="glovesBadge" class="badge badge-gloves">0 Gloves</span>
+        <span id="negBadge" class="badge badge-negative">0 Negatives</span>
+      </div>
+      <div class="progress-bar-bg">
+        <div id="progressBar" class="progress-bar-fill" style="width: 0%;"></div>
+      </div>
+    </div>
+
+    <!-- Header Actions -->
+    <div class="header-actions" style="display:flex; align-items:center; gap:8px;">
+      <a href="/" target="_parent" class="btn" style="background: rgba(99, 102, 241, 0.25); border: 1px solid #818cf8; color: #c7d2fe; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;" title="Switch back to CCTV & Video Detection">
+        📹 Live Detector Dashboard ↩
+      </a>
+      <button id="detectUploadBtn" class="btn" style="background: linear-gradient(135deg, #8b5cf6, #6366f1); color: #fff; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 3px 12px rgba(99, 102, 241, 0.35); border: none;" title="Upload an image from PC to run AI Gloves/Hand Detection">
+        📷 Upload & Test Image
+      </button>
+      <button id="cctvGrabberBtn" class="btn btn-outline" style="border-color:#38bdf8; color:#38bdf8; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;" title="Open CCTV Live RTSP Stream Grabber (15 frames/min)">
+        📹 CCTV Grabber
+      </button>
+      <span id="cctvLiveBadge" class="badge" style="display:none; font-size:12px; padding:5px 10px; border-radius:12px; background:rgba(56,189,248,0.18); color:#38bdf8; border:1px solid #38bdf8; animation: pulse 2s infinite;">
+        🔴 CCTV: 0 frames
+      </span>
+      <button id="trainModelBtn" class="btn btn-primary" title="Fine-tune YOLO model on reviewed dataset (5 epochs)" style="background: linear-gradient(135deg, #10b981, #059669); border: none; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;">
+        🚀 Train Model Now
+      </button>
+      <span id="trainStatusBadge" class="badge" style="display:none; font-size:12px; padding:5px 10px; border-radius:12px; background:rgba(16,185,129,0.18); color:#34d399; border:1px solid #10b981; animation: pulse 2s infinite;">
+        ⚡ Training: Epoch 0/5
+      </span>
+      <button id="batchAiBtn" class="btn btn-secondary" title="Auto-detect for all remaining unreviewed images">
+        ⚡ Batch AI Auto-Label
+      </button>
+      <a href="/api/export" id="exportBtn" class="btn btn-outline" style="text-decoration:none; display:inline-flex; align-items:center; gap:6px;" title="Download labeled images and labels as a ZIP archive">
+        📥 Export Dataset (.zip)
+      </a>
+    </div>
+  </header>
+
+  <!-- Live Toast Notification Container -->
+  <div id="toastNotification" style="display:none; position:fixed; bottom:24px; right:24px; z-index:9999; background:#1e293b; color:#fff; border:1px solid #10b981; padding:12px 20px; border-radius:8px; box-shadow:0 10px 25px rgba(0,0,0,0.5); font-size:14px; font-weight:500;"></div>
+
+  <!-- Main Studio Workspace -->
+  <main class="studio-layout">
+    <!-- Left Sidebar: Thumbnail Image Queue -->
+    <aside class="sidebar-queue">
+      <div class="queue-header">
+        <div class="filter-tabs">
+          <button class="tab-btn active" data-filter="all">All</button>
+          <button class="tab-btn" data-filter="pending">Pending</button>
+          <button class="tab-btn" data-filter="reviewed">Reviewed</button>
+        </div>
+        <div class="search-row" style="display:flex; gap:6px; margin-top:8px;">
+          <input type="text" id="searchBox" placeholder="Search image name..." class="search-input" style="flex:1;">
+          <button id="refreshQueueBtn" class="icon-btn" title="Refresh Images Queue" style="padding:6px 10px; font-size:14px;">🔄</button>
+        </div>
+      </div>
+      <div id="thumbnailList" class="thumbnail-list">
+        <!-- Thumbnails dynamically rendered here -->
+      </div>
+    </aside>
+
+    <!-- Center Canvas Area: Interactive Annotation Board -->
+    <section class="canvas-workspace">
+      <!-- Floating Top Bar over Canvas -->
+      <div class="canvas-floating-header">
+        <div class="image-meta">
+          <span id="currentImageName" class="image-name">No image selected</span>
+          <span id="currentImageDim" class="image-dim"></span>
+          <span id="currentStatusBadge" class="status-indicator"></span>
+        </div>
+        <div class="canvas-zoom-controls">
+          <button id="zoomOutBtn" class="icon-btn" title="Zoom Out (-)">−</button>
+          <span id="zoomLevelText">100%</span>
+          <button id="zoomInBtn" class="icon-btn" title="Zoom In (+)">+</button>
+          <button id="zoomFitBtn" class="icon-btn" title="Reset View">Fit</button>
+        </div>
+      </div>
+
+      <!-- Interactive Canvas Container -->
+      <div id="canvasWrapper" class="canvas-wrapper">
+        <canvas id="annotationCanvas"></canvas>
+      </div>
+
+      <!-- Quick Bottom Action Bar -->
+      <div class="canvas-bottom-bar">
+        <div class="nav-btn-group">
+          <button id="prevBtn" class="btn btn-outline" title="Previous Image (Left Arrow)">
+            ◀ Prev (A)
+          </button>
+          <button id="nextBtn" class="btn btn-outline" title="Next Image (Right Arrow)">
+            Next (D) ▶
+          </button>
+        </div>
+
+        <div class="main-action-group">
+          <button id="markNegativeBtn" class="btn btn-danger" title="Save as Bare Hands / Negative with NO gloves (N)">
+            🚫 Mark as Negative (N)
+          </button>
+          <button id="approveBtn" class="btn btn-success" title="Approve and proceed to next image (Space/Enter)">
+            ✅ Approve & Next (Space)
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right Sidebar: Inspector & Controls -->
+    <aside class="sidebar-inspector">
+      <!-- Active Class Selector -->
+      <div class="inspector-card">
+        <h3>🏷️ Active Drawing Class</h3>
+        <div class="class-selector-group">
+          <button id="classHandBtn" class="class-btn active" data-class="1" data-name="Hand">
+            ✋ Hand (1)
+          </button>
+          <button id="classGlovesBtn" class="class-btn" data-class="0" data-name="Gloves">
+            🧤 Gloves (2)
+          </button>
+        </div>
+      </div>
+
+      <!-- AI Settings Box -->
+      <div class="inspector-card">
+        <h3>🤖 AI Model Assistant</h3>
+        <div class="control-row">
+          <label for="confSlider">Detection Threshold:</label>
+          <span id="confValue" class="slider-value">0.25</span>
+        </div>
+        <input type="range" id="confSlider" min="0.10" max="0.85" step="0.05" value="0.25" class="slider">
+        <button id="reDetectBtn" class="btn btn-secondary btn-block">
+          🔄 Re-Run AI Detection (R)
+        </button>
+      </div>
+
+      <!-- Bounding Boxes List in Current Image -->
+      <div class="inspector-card boxes-card">
+        <div class="card-title-row">
+          <h3>📦 Detected Gloves (<span id="boxCount">0</span>)</h3>
+          <button id="clearAllBtn" class="btn-text-danger" title="Clear all boxes">Clear All</button>
+        </div>
+        <div id="boxList" class="box-list">
+          <p class="empty-hint">Click & drag on image to create a glove box, or use AI predictions.</p>
+        </div>
+      </div>
+
+      <!-- Selected Box Editor -->
+      <div class="inspector-card">
+        <h3>✏️ Selected Box</h3>
+        <div id="selectedBoxProps" class="selected-props">
+          <p class="empty-hint">Click any box to inspect or edit.</p>
+        </div>
+        <button id="deleteSelectedBtn" class="btn btn-danger btn-block" disabled>
+          🗑️ Delete Box (Del)
+        </button>
+      </div>
+
+      <!-- Shortcuts Cheatsheet -->
+      <div class="inspector-card shortcuts-card">
+        <h3>⚡ Keyboard Shortcuts</h3>
+        <ul class="shortcut-list">
+          <li><kbd>Space</kbd> / <kbd>Enter</kbd> <span>Approve & Next</span></li>
+          <li><kbd>N</kbd> <span>Mark as Negative (0 gloves)</span></li>
+          <li><kbd>Del</kbd> / <kbd>Backspace</kbd> <span>Delete Box</span></li>
+          <li><kbd>A</kbd> / <kbd>◀</kbd> <span>Previous Image</span></li>
+          <li><kbd>D</kbd> / <kbd>▶</kbd> <span>Next Image</span></li>
+          <li><kbd>R</kbd> <span>Re-run AI Detection</span></li>
+          <li><kbd>C</kbd> <span>Clear All Boxes</span></li>
+        </ul>
+      </div>
+    </aside>
+  </main>
+
+  <!-- CCTV RTSP Stream Grabber Modal -->
+  <div id="cctvModal" class="modal-overlay" style="display:none;">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-size:24px;">📹</span>
+          <div>
+            <h2 style="font-size:18px; margin:0; font-weight:700;">CCTV Stream Frame Collector</h2>
+            <p style="font-size:12px; color:var(--text-secondary); margin:0;">Capture live frames from CCTV RTSP stream into dataset for labeling</p>
+          </div>
+        </div>
+        <button id="cctvCloseBtn" class="modal-close-btn">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- RTSP Stream URL Input -->
+        <div class="form-group">
+          <label for="cctvRtspUrl" class="form-label">
+            <strong>RTSP Stream URL:</strong>
+            <span style="font-size:11px; color:var(--text-muted);">(Customizable live camera stream address)</span>
+          </label>
+          <input type="text" id="cctvRtspUrl" class="form-input" 
+                 value="rtsp://admin:Syn@vos@456@192.168.1.128:554/Streaming/Channels/301"
+                 placeholder="rtsp://user:password@ip:port/Streaming/Channels/101">
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:14px; margin-top:14px;">
+          <!-- Capture Rate -->
+          <div class="form-group">
+            <label for="cctvRateSelect" class="form-label">
+              <strong>Capture Rate:</strong>
+            </label>
+            <select id="cctvRateSelect" class="styled-select" style="width:100%;">
+              <option value="15" selected>15 frames / min (1 frame every 4 sec)</option>
+              <option value="10">10 frames / min (1 frame every 6 sec)</option>
+              <option value="20">20 frames / min (1 frame every 3 sec)</option>
+              <option value="30">30 frames / min (1 frame every 2 sec)</option>
+              <option value="60">60 frames / min (1 frame every 1 sec)</option>
+            </select>
+          </div>
+
+          <!-- Dataset Category -->
+          <div class="form-group">
+            <label for="cctvCategorySelect" class="form-label">
+              <strong>Target Category:</strong>
+            </label>
+            <select id="cctvCategorySelect" class="styled-select" style="width:100%;">
+              <option value="negatives" selected>🚫 Bare Hands (Negatives - empty txt)</option>
+              <option value="gloves">🧤 Gloves (For manual labeling)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Live Status Card -->
+        <div id="cctvStatusCard" class="cctv-status-card" style="margin-top:16px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span id="cctvStatusDot" class="status-dot"></span>
+              <strong id="cctvStatusText" style="font-size:14px;">Status: Idle</strong>
+            </div>
+            <span id="cctvElapsedTime" style="font-size:12px; color:var(--text-secondary);">Elapsed: 00:00</span>
+          </div>
+
+          <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:8px; text-align:center;">
+            <div class="stat-mini-box">
+              <span class="stat-label">Saved Frames</span>
+              <span id="cctvSavedCount" class="stat-val" style="color:#38bdf8;">0</span>
+            </div>
+            <div class="stat-mini-box">
+              <span class="stat-label">Interval</span>
+              <span id="cctvIntervalVal" class="stat-val">4.0s</span>
+            </div>
+            <div class="stat-mini-box">
+              <span class="stat-label">Last Saved</span>
+              <span id="cctvLastTime" class="stat-val">--:--:--</span>
+            </div>
+          </div>
+
+          <div id="cctvErrorBanner" style="display:none; margin-top:10px; padding:8px 12px; background:rgba(248,81,73,0.15); border:1px solid rgba(248,81,73,0.4); border-radius:6px; color:#ff7b72; font-size:12px;"></div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button id="cctvModalCancelBtn" class="btn btn-secondary">Close</button>
+        <button id="cctvStopBtn" class="btn btn-danger" style="display:none;">
+          ⏹ Stop Capture
+        </button>
+        <button id="cctvStartBtn" class="btn btn-primary" style="background: linear-gradient(135deg, #0284c7, #0369a1); border:none; font-weight:600;">
+          ▶ Start Capturing Frames
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Image Upload & AI Detection Modal -->
+  <div id="detectModal" class="modal-overlay" style="display:none;">
+    <div class="modal-box" style="max-width: 960px; width: 95%;">
+      <div class="modal-header">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-size:24px;">🔬</span>
+          <div>
+            <h2 style="font-size:18px; margin:0; font-weight:700;">AI Gloves & Hand Detector</h2>
+            <p style="font-size:12px; color:var(--text-secondary); margin:0;">Upload any picture from PC to test with the newly trained 2-Class AI Model</p>
+          </div>
+        </div>
+        <button id="detectCloseBtn" class="modal-close-btn">&times;</button>
+      </div>
+
+      <div class="modal-body" style="padding: 18px 24px;">
+        <!-- Top Toolbar -->
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:14px; margin-bottom:16px; background:rgba(255,255,255,0.02); padding:10px 16px; border-radius:8px; border:1px solid var(--border-color);">
+          <div style="display:flex; align-items:center; gap:12px;">
+            <label for="detectConfSlider" style="font-size:13px; color:var(--text-secondary); font-weight:500;">Confidence Threshold:</label>
+            <input type="range" id="detectConfSlider" min="0.10" max="0.90" step="0.05" value="0.25" style="width:130px; accent-color:#6366f1;">
+            <span id="detectConfVal" style="font-family:var(--font-mono); font-size:13px; font-weight:600; color:#a5b4fc;">0.25</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span class="badge" style="background:rgba(99,102,241,0.18); color:#a5b4fc; border:1px solid #6366f1; font-size:12px; padding:4px 10px; border-radius:12px;">
+              Active Model: 2-Class (0: Gloves | 1: Hand)
+            </span>
+          </div>
+        </div>
+
+        <!-- Dropzone / File Picker Area -->
+        <div id="detectDropzone" class="detect-dropzone" style="border: 2px dashed #6366f1; border-radius: 12px; padding: 32px 20px; text-align: center; cursor: pointer; transition: all 0.2s; background: rgba(99, 102, 241, 0.04);">
+          <input type="file" id="detectFileInput" accept="image/*" style="display:none;">
+          <div style="font-size: 42px; margin-bottom: 8px;">📸</div>
+          <h3 style="font-size: 16px; margin-bottom: 6px; font-weight: 600;">Drag & Drop picture here, or <span style="color:#818cf8; text-decoration:underline;">Click to Browse</span></h3>
+          <p style="font-size: 12px; color: var(--text-muted); margin: 0;">Supports JPG, PNG, WEBP, BMP — or Paste directly from clipboard (Ctrl+V)</p>
+        </div>
+
+        <!-- Processing Indicator -->
+        <div id="detectLoadingIndicator" style="display:none; text-align:center; padding:35px 20px;">
+          <div class="spinner" style="display:inline-block; width:38px; height:38px; border:3px solid rgba(99,102,241,0.2); border-top-color:#6366f1; border-radius:50%; animation: spin 0.8s linear infinite;"></div>
+          <p style="margin-top:12px; font-size:14px; font-weight:500; color:#a5b4fc;">Running GPU AI Inference on image...</p>
+        </div>
+
+        <!-- Results Display Container -->
+        <div id="detectResultContainer" style="display:none; margin-top:18px;">
+          <!-- Status Alert Banner -->
+          <div id="detectStatusBanner" style="padding: 12px 18px; border-radius: 8px; font-size: 14px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; border: 1px solid transparent;">
+            <span id="detectStatusText">Status</span>
+            <span id="detectLatencyBadge" style="font-family:var(--font-mono); font-size:12px; font-weight:normal; opacity:0.9;">-- ms</span>
+          </div>
+
+          <!-- Main Layout: Preview Image + Stats Breakdown -->
+          <div style="display:grid; grid-template-columns: 1.8fr 1.2fr; gap:16px;">
+            <!-- Annotated Image Display -->
+            <div style="background:#090d13; border:1px solid var(--border-color); border-radius:8px; overflow:hidden; display:flex; align-items:center; justify-content:center; min-height:340px; max-height:480px;">
+              <img id="detectResultImg" src="" alt="Detection Result" style="max-width:100%; max-height:480px; object-fit:contain; display:block;">
+            </div>
+
+            <!-- Stats & Details Breakdown -->
+            <div style="display:flex; flex-direction:column; gap:12px;">
+              <!-- Mini Cards for Gloves & Hand Count -->
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+                <div style="background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.3); border-radius:8px; padding:12px; text-align:center;">
+                  <span style="display:block; font-size:11px; color:#86efac; margin-bottom:2px; font-weight:500;">🧤 Gloves Detected</span>
+                  <span id="detectGlovesCount" style="font-size:26px; font-weight:700; color:#22c55e; font-family:var(--font-mono);">0</span>
+                </div>
+                <div style="background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.3); border-radius:8px; padding:12px; text-align:center;">
+                  <span style="display:block; font-size:11px; color:#fca5a5; margin-bottom:2px; font-weight:500;">✋ Bare Hands</span>
+                  <span id="detectHandCount" style="font-size:26px; font-weight:700; color:#ef4444; font-family:var(--font-mono);">0</span>
+                </div>
+              </div>
+
+              <!-- List of detections -->
+              <div style="flex:1; background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:8px; padding:12px; overflow-y:auto; max-height:220px;">
+                <h4 style="font-size:11px; color:var(--text-secondary); margin-bottom:8px; text-transform:uppercase; letter-spacing:0.5px;">Detected Objects:</h4>
+                <div id="detectDetectionsList" style="display:flex; flex-direction:column; gap:6px;">
+                  <!-- Filled dynamically -->
+                </div>
+              </div>
+
+              <!-- Quick action to save to dataset -->
+              <div style="display:flex; flex-direction:column; gap:6px;">
+                <span style="font-size:11px; color:var(--text-muted);">Save to training dataset:</span>
+                <div style="display:flex; gap:8px;">
+                  <button id="detectSaveGlovesBtn" class="btn btn-secondary" style="flex:1; font-size:12px; padding:8px 10px;" title="Add image with labels to Gloves dataset">
+                    + Add to Gloves
+                  </button>
+                  <button id="detectSaveNegBtn" class="btn btn-secondary" style="flex:1; font-size:12px; padding:8px 10px;" title="Add image with empty labels to Negatives dataset">
+                    + Add to Negatives
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button id="detectUploadNewBtn" class="btn btn-secondary" style="display:none;">Upload Another Image</button>
+        <button id="detectModalCloseBtn" class="btn btn-outline">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js?v=3"></script>
+</body>
+</html>

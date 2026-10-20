@@ -1,0 +1,5 @@
+{
+  "is_training": true,
+  "stage": "2/4: Candidate Model Training",
+  "message": "Training YOLO26L for 30 epochs (Batch: 4)..."
+}
